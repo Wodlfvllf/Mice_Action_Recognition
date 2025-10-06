@@ -1,10 +1,12 @@
+from pathlib import Path
+
 def get_default_config():
     """Get default configuration"""
     
     config = {
         # Data paths
-        'data_dir': Path('/kaggle/input/mabe-2024-behavior-challenge'),
-        'output_dir': Path('/kaggle/working'),
+        'data_dir': Path('./dataset/'),
+        'output_dir': Path('.'),
         
         # Window parameters
         'window_size': 64,
