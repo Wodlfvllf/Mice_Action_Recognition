@@ -11,16 +11,20 @@ class LabelCreator:
         self.window_size = window_size
         self.num_classes = num_classes
         self.label_encoder = LabelEncoder()
+
+    def fit(self, annotation_paths: list[Path]):
+        """Fit label encoder on all behaviors"""
+        all_behaviors = set()
+        for path in annotation_paths:
+            annotations = pd.read_parquet(path)
+            all_behaviors.update(annotations['action'].unique())
+        self.label_encoder.fit(list(all_behaviors))
     
     def create_labels(self, annotations_path: Path, window_meta: pd.DataFrame):
         """Create DETR-style labels for each window"""
         
         # Load annotations
         annotations = pd.read_parquet(annotations_path)
-        
-        # Fit label encoder on all behaviors
-        all_behaviors = annotations['action'].unique()
-        self.label_encoder.fit(all_behaviors)
         
         # Create labels for each window
         window_labels = []

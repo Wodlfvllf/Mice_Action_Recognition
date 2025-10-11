@@ -70,6 +70,14 @@ class CompletePipeline:
         
         # Load metadata
         train_df = pd.read_csv(self.config['data_dir'] / 'train.csv')
+
+        # Fit label encoder
+        annotation_paths = []
+        for idx, row in train_df.iterrows():
+            ann_path = self.config['data_dir'] / f"train_annotation/{row['lab_id']}/{row['video_id']}.parquet"
+            if ann_path.exists():
+                annotation_paths.append(ann_path)
+        self.label_creator.fit(annotation_paths)
         
         # Process each video
         for idx, row in tqdm(train_df.iterrows(), total=len(train_df), desc="Processing videos"):
@@ -111,6 +119,9 @@ class CompletePipeline:
         label_files = list(self.preprocessor.dirs['labels'].glob('*.npy'))
         video_ids = [f.stem.replace('_labels', '') for f in label_files]
         
+        # Shuffle video_ids for random split
+        video_ids = np.random.permutation(video_ids)
+
         # Split train/val
         n_train = int(0.8 * len(video_ids))
         train_ids = video_ids[:n_train]
