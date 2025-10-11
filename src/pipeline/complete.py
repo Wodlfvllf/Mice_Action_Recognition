@@ -13,6 +13,13 @@ from ..training import MouseBehaviorDataset, train_epoch, evaluate
 from ..inference import InferenceEngine
 
 
+def _collate_fn(batch):
+    """Custom collate function for variable-length labels"""
+    windows = torch.stack([item[0] for item in batch])
+    labels = [item[1] for item in batch]
+    return windows, labels
+
+
 class CompletePipeline:
     """Complete end-to-end training pipeline"""
     
@@ -148,16 +155,16 @@ class CompletePipeline:
             train_dataset,
             batch_size=self.config['batch_size'],
             shuffle=True,
-            num_workers=4,
-            collate_fn=self._collate_fn
+            num_workers=self.config['num_workers'],
+            collate_fn=_collate_fn
         )
         
         val_loader = DataLoader(
             val_dataset,
             batch_size=self.config['batch_size'],
             shuffle=False,
-            num_workers=4,
-            collate_fn=self._collate_fn
+            num_workers=self.config['num_workers'],
+            collate_fn=_collate_fn
         )
         
         # Training loop
@@ -240,9 +247,3 @@ class CompletePipeline:
         print(f"Generated submission with {len(submission)} predictions")
         
         return submission
-    
-    def _collate_fn(self, batch):
-        """Custom collate function for variable-length labels"""
-        windows = torch.stack([item[0] for item in batch])
-        labels = [item[1] for item in batch]
-        return windows, labels
