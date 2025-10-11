@@ -77,54 +77,28 @@ class DataPreprocessor:
         return pivot
     
     def _create_mouse_center_features(self, raw_pose: pd.DataFrame, metadata: pd.Series):
-        """Create aggregated center features per mouse"""
-        
-        features = []
-        
-        for (frame, mouse_id), group in raw_pose.groupby(['video_frame', 'mouse_id']):
-            x_cols = [c for c in group.columns if c.startswith('x_')]
-            y_cols = [c for c in group.columns if c.startswith('y_')]
-            
-            # Center as mean of visible keypoints
-            x_vals = group[x_cols].values[0]
-            y_vals = group[y_cols].values[0]
-            
-            x_valid = x_vals[~np.isnan(x_vals)]
-            y_valid = y_vals[~np.isnan(y_vals)]
-            
-            if len(x_valid) > 0:
-                cx = np.mean(x_valid)
-                cy = np.mean(y_valid)
-                vis_frac = len(x_valid) / len(x_cols)
-            else:
-                cx = cy = np.nan
-                vis_frac = 0.0
-            
-            features.append({
-                'video_frame': frame,
-                'mouse_id': mouse_id,
-                'cx': cx,
-                'cy': cy,
-                'vis_frac': vis_frac
-            })
-        
-        df = pd.DataFrame(features).sort_values(['video_frame', 'mouse_id'])
-        
-        # Add velocity features
-        for mouse_id in df['mouse_id'].unique():
-            mask = df['mouse_id'] == mouse_id
-            mouse_df = df[mask].copy()
-            
-            # Compute velocities (frame-to-frame differences)
-            mouse_df['vx'] = mouse_df['cx'].diff()
-            mouse_df['vy'] = mouse_df['cy'].diff()
-            mouse_df['speed'] = np.sqrt(mouse_df['vx']**2 + mouse_df['vy']**2)
-            
-            df.loc[mask, ['vx', 'vy', 'speed']] = mouse_df[['vx', 'vy', 'speed']].values
-        
+        """Create aggregated center features per mouse (vectorized)"""
+
+        # Get x and y columns
+        x_cols = [c for c in raw_pose.columns if c.startswith('x_')]
+        y_cols = [c for c in raw_pose.columns if c.startswith('y_')]
+
+        # Calculate center of mass and visibility fraction
+        df = raw_pose.copy()
+        df['cx'] = df[x_cols].mean(axis=1)
+        df['cy'] = df[y_cols].mean(axis=1)
+        df['vis_frac'] = df[x_cols].notna().sum(axis=1) / len(x_cols)
+
+        # Select and sort columns
+        df = df[['video_frame', 'mouse_id', 'cx', 'cy', 'vis_frac']].sort_values(['video_frame', 'mouse_id'])
+
+        # Calculate velocities using groupby().diff()
+        df[['vx', 'vy']] = df.groupby('mouse_id')[['cx', 'cy']].diff()
+        df['speed'] = np.sqrt(df['vx']**2 + df['vy']**2)
+
         # Fill NaN velocities with 0
         df[['vx', 'vy', 'speed']] = df[['vx', 'vy', 'speed']].fillna(0)
-        
+
         return df
     
     def _create_pairwise_features(self, mouse_center: pd.DataFrame):
