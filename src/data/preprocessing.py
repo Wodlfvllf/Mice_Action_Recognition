@@ -54,6 +54,9 @@ class DataPreprocessor:
     def _create_raw_pose_features(self, tracking_df: pd.DataFrame, metadata: pd.Series):
         """Reshape tracking data to wide format with all keypoints per mouse"""
         
+        if tracking_df.empty:
+            return pd.DataFrame()
+
         # Pivot to get all bodyparts as columns
         pivot = tracking_df.pivot_table(
             index=['video_frame', 'mouse_id'],
@@ -62,6 +65,9 @@ class DataPreprocessor:
             fill_value=np.nan
         )
         
+        if pivot.empty:
+            return pd.DataFrame()
+
         # Flatten column names
         pivot.columns = ['_'.join(col).strip() for col in pivot.columns.values]
         pivot = pivot.reset_index()
