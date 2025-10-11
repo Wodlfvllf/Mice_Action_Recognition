@@ -128,41 +128,32 @@ class DataPreprocessor:
         return df
     
     def _create_pairwise_features(self, mouse_center: pd.DataFrame):
-        """Create pairwise distance and relative motion features"""
+        """Create pairwise distance and relative motion features (vectorized)"""
+
+        # Merge to create all pairs
+        pairs = pd.merge(mouse_center, mouse_center, on='video_frame', suffixes=('_agent', '_target'))
+
+        # Filter for valid pairs (agent_id >= target_id)
+        pairs = pairs[pairs['mouse_id_agent'] >= pairs['mouse_id_target']].copy()
+
+        # Calculate pairwise features
+        pairs['dist'] = np.sqrt((pairs['cx_agent'] - pairs['cx_target'])**2 +
+                                (pairs['cy_agent'] - pairs['cy_target'])**2)
+        pairs['rel_x'] = pairs['cx_agent'] - pairs['cx_target']
+        pairs['rel_y'] = pairs['cy_agent'] - pairs['cy_target']
+        pairs['rel_vx'] = pairs['vx_agent'] - pairs['vx_target']
+        pairs['rel_vy'] = pairs['vy_agent'] - pairs['vy_target']
+        pairs['rel_speed'] = np.sqrt(pairs['rel_vx']**2 + pairs['rel_vy']**2)
+
+        # Create pair_id
+        pairs['pair_id'] = pairs['mouse_id_agent'].astype(str) + '_' + pairs['mouse_id_target'].astype(str)
+
+        # Select and rename columns
+        pairs = pairs.rename(columns={'mouse_id_agent': 'agent_id', 'mouse_id_target': 'target_id'})
         
-        features = []
+        feature_cols = [
+            'video_frame', 'pair_id', 'agent_id', 'target_id',
+            'dist', 'rel_x', 'rel_y', 'rel_vx', 'rel_vy', 'rel_speed'
+        ]
         
-        for frame, group in mouse_center.groupby('video_frame'):
-            mice = group['mouse_id'].values
-            
-            for i, m1 in enumerate(mice):
-                for j, m2 in enumerate(mice):
-                    if i >= j:  # Include self-pairs
-                        m1_data = group[group['mouse_id'] == m1].iloc[0]
-                        m2_data = group[group['mouse_id'] == m2].iloc[0]
-                        
-                        # Distance and relative position
-                        dist = np.sqrt((m1_data['cx'] - m2_data['cx'])**2 + 
-                                      (m1_data['cy'] - m2_data['cy'])**2)
-                        rel_x = m1_data['cx'] - m2_data['cx']
-                        rel_y = m1_data['cy'] - m2_data['cy']
-                        
-                        # Relative velocity
-                        rel_vx = m1_data['vx'] - m2_data['vx']
-                        rel_vy = m1_data['vy'] - m2_data['vy']
-                        rel_speed = np.sqrt(rel_vx**2 + rel_vy**2)
-                        
-                        features.append({
-                            'video_frame': frame,
-                            'pair_id': f'{m1}_{m2}',
-                            'agent_id': m1,
-                            'target_id': m2,
-                            'dist': dist,
-                            'rel_x': rel_x,
-                            'rel_y': rel_y,
-                            'rel_vx': rel_vx,
-                            'rel_vy': rel_vy,
-                            'rel_speed': rel_speed
-                        })
-        
-        return pd.DataFrame(features)
+        return pairs[feature_cols]
