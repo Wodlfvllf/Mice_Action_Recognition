@@ -34,51 +34,40 @@ class WindowCreator:
         return windows, window_meta
     
     def _combine_features(self, features_dict: Dict):
-        """Combine different feature types into single frame representation"""
-        
+        """Combine different feature types into single frame representation (vectorized)"""
+
         mouse_center = features_dict['mouse_center']
         pairwise = features_dict['pairwise']
-        
+
+        # Pivot mouse_center features
+        mc_pivot = mouse_center.pivot_table(index='video_frame', columns='mouse_id',
+                                            values=['cx', 'cy', 'vx', 'vy', 'speed', 'vis_frac'])
+        mc_pivot.columns = ['_'.join(map(str, col)) for col in mc_pivot.columns]
+
+        # Pivot pairwise features
+        pw_pivot = pairwise.pivot_table(index='video_frame', columns='pair_id',
+                                        values=['dist', 'rel_x', 'rel_y', 'rel_vx', 'rel_vy', 'rel_speed'])
+        pw_pivot.columns = ['_'.join(map(str, col)) for col in pw_pivot.columns]
+
+        # Merge features
+        combined = pd.concat([mc_pivot, pw_pivot], axis=1)
+
         # Get unique frames
         frames = sorted(mouse_center['video_frame'].unique())
-        n_frames = len(frames)
-        
-        # Initialize combined feature array
-        combined = np.zeros((n_frames, self.feature_dim), dtype=np.float32)
-        
-        for i, frame in enumerate(frames):
-            features = []
-            
-            # Mouse center features (4 mice × 6 features = 24)
-            frame_mice = mouse_center[mouse_center['video_frame'] == frame]
-            for _, mouse in frame_mice.iterrows():
-                features.extend([
-                    mouse['cx'], mouse['cy'], 
-                    mouse['vx'], mouse['vy'],
-                    mouse['speed'], mouse['vis_frac']
-                ])
-            
-            # Pairwise features (6 pairs × 6 features = 36)
-            frame_pairs = pairwise[pairwise['video_frame'] == frame]
-            for _, pair in frame_pairs.iterrows():
-                features.extend([
-                    pair['dist'], pair['rel_x'], pair['rel_y'],
-                    pair['rel_vx'], pair['rel_vy'], pair['rel_speed']
-                ])
-            
-            # Pad or truncate to feature_dim
-            features = np.array(features)
-            if len(features) < self.feature_dim:
-                features = np.pad(features, (0, self.feature_dim - len(features)))
-            else:
-                features = features[:self.feature_dim]
-            
-            combined[i] = features
-        
-        # Replace NaN with 0
-        combined = np.nan_to_num(combined, 0)
-        
-        return combined, frames
+        combined = combined.reindex(frames)
+
+        # Pad or truncate to feature_dim
+        if combined.shape[1] < self.feature_dim:
+            padding = pd.DataFrame(np.zeros((combined.shape[0], self.feature_dim - combined.shape[1])),
+                                   index=combined.index)
+            combined = pd.concat([combined, padding], axis=1)
+        elif combined.shape[1] > self.feature_dim:
+            combined = combined.iloc[:, :self.feature_dim]
+
+        # Replace NaN with 0 and convert to numpy
+        combined_np = np.nan_to_num(combined.values, 0).astype(np.float32)
+
+        return combined_np, frames
     
     def _create_sliding_windows(self, combined_features, video_id: str):
         """Create sliding windows with metadata"""
